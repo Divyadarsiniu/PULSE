@@ -19,14 +19,11 @@ export async function registerUser(name, email, password) {
     body: JSON.stringify({ name, email, password })
   });
   
-  const text = await response.text();
-  try {
-    const data = JSON.parse(text);
-    if (!response.ok) throw new Error(data.detail || data.message || 'Signup failed');
-    return data.user;
-  } catch (e) {
-    throw new Error(`Backend Error: ${text.substring(0, 50) || response.statusText}`);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.detail || data?.message || 'Failed to create account. Please try again.');
   }
+  return data.user;
 }
 
 export async function loginUser(email, password) {
@@ -36,14 +33,11 @@ export async function loginUser(email, password) {
     body: JSON.stringify({ email, password })
   });
   
-  const text = await response.text();
-  try {
-    const data = JSON.parse(text);
-    if (!response.ok) throw new Error(data.detail || data.message || 'Login failed');
-    return data.user;
-  } catch (e) {
-    throw new Error(`Backend Error: ${text.substring(0, 50) || response.statusText}`);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error('Invalid user id or password.');
   }
+  return data.user;
 }
 
 export async function resetPassword(email, newPassword) {
