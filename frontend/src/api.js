@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'https://pulse-backend-1-crsq.onrender.com';
 
 export async function fetchWatchlist(userId) {
   try {
@@ -13,17 +13,37 @@ export async function acknowledgeChanges(userId) {
 }
 
 export async function registerUser(name, email, password) {
-  const response = await fetch(`${API_BASE_URL}/auth/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Signup failed');
-  return data.user;
+  const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password })
+  });
+  
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    if (!response.ok) throw new Error(data.detail || data.message || 'Signup failed');
+    return data.user;
+  } catch (e) {
+    throw new Error(`Backend Error: ${text.substring(0, 50) || response.statusText}`);
+  }
 }
 
 export async function loginUser(email, password) {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Login failed');
-  return data.user;
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    if (!response.ok) throw new Error(data.detail || data.message || 'Login failed');
+    return data.user;
+  } catch (e) {
+    throw new Error(`Backend Error: ${text.substring(0, 50) || response.statusText}`);
+  }
 }
 
 export async function resetPassword(email, newPassword) {
