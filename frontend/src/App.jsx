@@ -9,7 +9,7 @@ import LandingPage from './pages/LandingPage';
 import './index.css';
 
 export default function App() {
-  // SELF-HEALING CACHE: Automatically fixes old profiles missing the timestamp
+  // SELF-HEALING CACHE
   const [user, setUser] = useState(() => {
     const storedUser = JSON.parse(localStorage.getItem('pulse_user'));
     if (storedUser && (!storedUser.last_checked_at || storedUser.last_checked_at === 'None')) {
@@ -20,7 +20,8 @@ export default function App() {
   });
   
   const [activeTab, setActiveTab] = useState('home');
-  const [authView, setAuthView] = useState(null); 
+  // FIXED: Using showAuth for the single "Get Started" button
+  const [showAuth, setShowAuth] = useState(false); 
 
   const handleLogin = (u) => { 
     setUser(u); 
@@ -30,19 +31,16 @@ export default function App() {
   const handleLogout = () => { 
     setUser(null); 
     localStorage.removeItem('pulse_user'); 
-    setAuthView(null); 
+    setShowAuth(false); 
   };
 
   if (!user) {
-    if (authView) {
-      return <Login onLogin={handleLogin} defaultView={authView} onBack={() => setAuthView(null)} />;
+    if (showAuth) {
+      // User clicked Get Started, show the login/signup screen
+      return <Login onLogin={handleLogin} defaultView="signup" onBack={() => setShowAuth(false)} />;
     }
-    return (
-      <LandingPage 
-        onLoginClick={() => setAuthView('login')} 
-        onSignupClick={() => setAuthView('signup')} 
-      />
-    );
+    // FIXED: Properly passing onGetStarted to match your LandingPage.jsx!
+    return <LandingPage onGetStarted={() => setShowAuth(true)} />;
   }
 
   const renderContent = () => {
