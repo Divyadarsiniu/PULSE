@@ -7,6 +7,8 @@ import market_data
 from market_data import get_market_data
 from detector import calculate_20_day_avg_volume, get_latest_price_and_volume, detect_meaningful_change
 from attention import calculate_attention
+from typing import Optional
+
 
 app = FastAPI(title="Pulse Intelligence API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])

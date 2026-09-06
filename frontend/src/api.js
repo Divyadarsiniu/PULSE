@@ -21,9 +21,10 @@ export async function registerUser(name, email, password) {
   
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(data?.detail || data?.message || 'Failed to create account. Please try again.');
+    throw new Error(data?.detail || data?.message || 'Registration failed.');
   }
-  return data.user;
+  // CRITICAL: We must return the ENTIRE user object so the timestamp isn't lost
+  return data.user; 
 }
 
 export async function loginUser(email, password) {
@@ -35,9 +36,10 @@ export async function loginUser(email, password) {
   
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error('Invalid user id or password.');
+    throw new Error(data?.detail || data?.message || 'Invalid user id or password.');
   }
-  return data.user;
+  // CRITICAL: We must return the ENTIRE user object here too
+  return data.user; 
 }
 
 export async function resetPassword(email, newPassword) {

@@ -1,133 +1,85 @@
 import React, { useState } from 'react';
-import { loginUser, registerUser, resetPassword } from '../api';
+import { loginUser, registerUser } from '../api';
 
-function Login({ onLogin }) {
-  const [view, setView] = useState('login');
+export default function Login({ onLogin, defaultView = 'login', onBack }) {
+  const [isLogin, setIsLogin] = useState(defaultView === 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccessMsg('');
     setLoading(true);
-
+    
     try {
-      if (view === 'forgot') {
-        const response = await resetPassword(email, password);
-        setSuccessMsg(response.message);
-        setView('login');
-        setPassword('');
-      } else if (view === 'signup') {
-        const userData = await registerUser(name, email, password);
-        onLogin(userData);
+      let userData;
+      if (isLogin) {
+        userData = await loginUser(email, password);
       } else {
-        const userData = await loginUser(email, password);
-        onLogin(userData);
+        userData = await registerUser(name, email, password);
       }
+      
+      // CRITICAL FIX: We are passing the FULL userData object here. 
+      // Do NOT do onLogin({ id: userData.id, email: userData.email }) because that deletes the timestamp!
+      onLogin(userData); 
+      
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getButtonText = () => {
-    if (loading) return 'Processing...';
-    if (view === 'forgot') return 'Set New Password';
-    if (view === 'signup') return 'Create Terminal Account';
-    return 'Sign In to Terminal';
-  };
-
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b0f17', color: '#f8fafc' }}>
-      <div style={{ maxWidth: '400px', width: '100%', padding: '2.5rem', backgroundColor: '#131b2e', borderRadius: '12px', border: '1px solid #1e293b', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)' }}>
+      <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem' }}>
+        {onBack && (
+          <button onClick={onBack} style={{ marginBottom: '1.5rem', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.9rem', padding: 0 }}>
+            ← Back to Home
+          </button>
+        )}
         
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '800', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>PULSE</div>
-          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.85rem' }}>
-            {view === 'forgot' ? 'Reset your intelligence terminal access.' : 'Know what changed. Know what matters.'}
-          </p>
+          <h2 style={{ margin: 0, letterSpacing: '2px', fontSize: '1.8rem' }}>PULSE</h2>
+          <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>Know what changed. Know what matters.</p>
         </div>
-
+        
         {error && (
-          <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 'bold', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+          <div style={{ backgroundColor: 'rgba(255, 68, 68, 0.1)', color: 'var(--accent-red)', padding: '1rem', borderRadius: '6px', marginBottom: '1.5rem', fontSize: '0.9rem', border: '1px solid rgba(255, 68, 68, 0.2)' }}>
             ⚠️ {error}
           </div>
         )}
-
-        {successMsg && (
-          <div style={{ backgroundColor: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 'bold', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
-            ✅ {successMsg}
-          </div>
-        )}
-
+        
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {view === 'signup' && (
+          {!isLogin && (
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '0.3rem' }}>Full Name</label>
-              <input 
-                type="text" required value={name} onChange={(e) => setName(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', backgroundColor: '#0b0f17', border: '1px solid #1e293b', color: '#f8fafc', boxSizing: 'border-box' }}
-                placeholder="Divya Darsini"
-              />
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} required style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)', color: 'white', fontSize: '1rem' }} />
             </div>
           )}
-
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '0.3rem' }}>Email Address</label>
-            <input 
-              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', backgroundColor: '#0b0f17', border: '1px solid #1e293b', color: '#f8fafc', boxSizing: 'border-box' }}
-              placeholder="name@example.com"
-            />
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Email Address</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)', color: 'white', fontSize: '1rem' }} />
           </div>
-
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#94a3b8', marginBottom: '0.3rem' }}>
-              {view === 'forgot' ? 'New Password' : 'Password'}
-            </label>
-            <input 
-              type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', backgroundColor: '#0b0f17', border: '1px solid #1e293b', color: '#f8fafc', boxSizing: 'border-box' }}
-              placeholder="••••••••"
-            />
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)', color: 'white', fontSize: '1rem' }} />
           </div>
-
-          <button 
-            type="submit" disabled={loading}
-            style={{ width: '100%', padding: '0.85rem', backgroundColor: '#38bdf8', color: '#0b0f17', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}
-          >
-            {getButtonText()}
+          <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.85rem', marginTop: '0.5rem', fontWeight: 'bold', fontSize: '1rem', backgroundColor: 'var(--accent-cyan)', color: '#000', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            {loading ? 'Processing...' : (isLogin ? 'Sign In to Terminal' : 'Create Terminal Account')}
           </button>
         </form>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', fontSize: '0.85rem' }}>
-          {view === 'login' ? (
-            <>
-              <span onClick={() => { setView('forgot'); setError(''); setSuccessMsg(''); }} style={{ color: '#94a3b8', cursor: 'pointer' }}>
-                Forgot password?
-              </span>
-              <span onClick={() => { setView('signup'); setError(''); setSuccessMsg(''); }} style={{ color: '#38bdf8', fontWeight: 'bold', cursor: 'pointer' }}>
-                Create Account
-              </span>
-            </>
-          ) : (
-            <div style={{ width: '100%', textAlign: 'center' }}>
-              <span onClick={() => { setView('login'); setError(''); setSuccessMsg(''); }} style={{ color: '#38bdf8', fontWeight: 'bold', cursor: 'pointer' }}>
-                ← Back to Login
-              </span>
-            </div>
-          )}
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2rem', fontSize: '0.9rem' }}>
+          <span style={{ color: 'var(--text-muted)', cursor: 'pointer' }}>Forgot password?</span>
+          <button onClick={() => { setIsLogin(!isLogin); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}>
+            {isLogin ? 'Create Account' : 'Sign In'}
+          </button>
         </div>
-
       </div>
     </div>
   );
 }
-
-export default Login;

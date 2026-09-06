@@ -1,14 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { fetchWatchlist, acknowledgeChanges, searchStocks, addStockToWatchlist } from '../api';
 
-export default function Home({ userId, userName }) {
+// Time calculator now accepts the live ticking clock
+function timeAgo(dateString, currentTime) {
+  if (!dateString || dateString === 'None' || dateString === 'null') return "Just now";
+  
+  const date = new Date(dateString);
+  if (isNaN(date)) return "Just now"; 
+  
+  const seconds = Math.floor((currentTime - date) / 1000);
+
+  if (seconds < 0 || seconds < 60) return "Just now";
+  
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days !== 1 ? 's' : ''} ago`;
+  const weeks = Math.floor(days / 7);
+  if (days < 30) return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months !== 1 ? 's' : ''} ago`;
+}
+
+export default function Home({ userId, userName, lastCheckedAt }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reviewed, setReviewed] = useState(false);
+  const [now, setNow] = useState(new Date()); // LIVE CLOCK STATE
   
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [adding, setAdding] = useState(false);
+
+  // TICK THE CLOCK EVERY 10 SECONDS
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const load = async () => { setLoading(true); setData(await fetchWatchlist(userId)); setLoading(false); };
   useEffect(() => { load(); }, [userId]);
@@ -37,6 +67,21 @@ export default function Home({ userId, userName }) {
 
   if (loading) return <div style={{ color: 'var(--text-muted)' }}>Loading your market intelligence...</div>;
   if (!data) return <div className="text-red">We couldn't update your market data. <button onClick={load}>Retry</button></div>;
+
+  // Pass the live ticking clock into the calculator
+  const lastCheckedStr = timeAgo(lastCheckedAt, now);
+  
+  let daysAway = 0;
+  if (lastCheckedAt && lastCheckedAt !== 'None' && lastCheckedAt !== 'null') {
+    const dateObj = new Date(lastCheckedAt);
+    if (!isNaN(dateObj)) {
+      daysAway = Math.floor((now - dateObj) / (1000 * 60 * 60 * 24));
+    }
+  }
+  
+  const welcomeMessage = daysAway > 0 
+    ? `You were away for ${daysAway} day${daysAway > 1 ? 's' : ''}. Here's what changed.`
+    : "Here's what changed since you last checked.";
 
   const SearchComponent = () => (
     <div style={{ position: 'relative', marginBottom: '2rem', maxWidth: '600px' }}>
@@ -81,9 +126,11 @@ export default function Home({ userId, userName }) {
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
         <div>
-          <h1>Welcome back, {userName.split(' ')[0]}.</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Here's what changed since you last checked.</p>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.5rem' }}>Last checked · {new Date(data.last_checked).toLocaleString()}</p>
+          <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Welcome back, {userName.split(' ')[0]}.</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>{welcomeMessage}</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+            Last checked · {lastCheckedStr}
+          </p>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.4rem 0.8rem', borderRadius: '4px' }}>
           {data.source_meta.status} · Updated {new Date(data.source_meta.timestamp).toLocaleTimeString()}

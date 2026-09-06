@@ -2,38 +2,55 @@ import os
 import json
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
-# Detect if we are deployed on Render
-DB_URL = os.environ.get("DATABASE_URL")
-USE_POSTGRES = DB_URL is not None
+# ---------------------------------------------------------
+# DATABASE CONFIGURATION
+# ---------------------------------------------------------
+USE_POSTGRES = os.getenv("DATABASE_URL") is not None
+DB_URL = os.getenv("DATABASE_URL", "sqlite:///pulse.db")
 
-if USE_POSTGRES:
-    import psycopg2
-else:
-    import sqlite3
-    DB_PATH = os.path.join(os.path.dirname(__file__), 'smart_market.db')
+if USE_POSTGRES and DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
 
 def get_conn():
     if USE_POSTGRES:
+        import psycopg2
         return psycopg2.connect(DB_URL)
-    return sqlite3.connect(DB_PATH)
+    else:
+        import sqlite3
+        return sqlite3.connect("pulse.db", check_same_thread=False)
 
+def _q(query: str) -> str:
+    return query.replace("?", "%s") if USE_POSTGRES else query
+
+# ---------------------------------------------------------
+# INITIALIZATION & MIGRATION
+# ---------------------------------------------------------
 def init_db():
     conn = get_conn()
     c = conn.cursor()
+    
+    # 1. Create table (with last_checked_at if it's a fresh database)
     if USE_POSTGRES:
-        c.execute('''CREATE TABLE IF NOT EXISTS memory_anchors (user_id TEXT PRIMARY KEY, timestamp TEXT, state_data TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS user_watchlists (user_id TEXT, ticker TEXT, UNIQUE(user_id, ticker))''')
-        c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (user_id TEXT PRIMARY KEY, price_threshold REAL DEFAULT 3.0, volume_threshold REAL DEFAULT 2.5, z_score_threshold REAL DEFAULT 2.0)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT, last_checked_at TEXT)''')
+    else:
+        c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT, last_checked_at TEXT)''')
+    
+    # 2. Safe Migration: Add column for older accounts (fails silently if it already exists)
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN last_checked_at TEXT')
+    except:
+        pass 
+        
+    c.execute('''CREATE TABLE IF NOT EXISTS memory_anchors (user_id TEXT PRIMARY KEY, timestamp TEXT, state_data TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS user_watchlists (user_id TEXT, ticker TEXT, UNIQUE(user_id, ticker))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (user_id TEXT PRIMARY KEY, price_threshold REAL DEFAULT 3.0, volume_threshold REAL DEFAULT 2.5, z_score_threshold REAL DEFAULT 2.0)''')
+    if USE_POSTGRES:
         c.execute('''CREATE TABLE IF NOT EXISTS market_history (id SERIAL PRIMARY KEY, user_id TEXT, ticker TEXT, company_name TEXT, event_type TEXT, details TEXT, timestamp TEXT)''')
     else:
-        c.execute('''CREATE TABLE IF NOT EXISTS memory_anchors (user_id TEXT PRIMARY KEY, timestamp TEXT, state_data TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS user_watchlists (user_id TEXT, ticker TEXT, UNIQUE(user_id, ticker))''')
-        c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (user_id TEXT PRIMARY KEY, price_threshold REAL DEFAULT 3.0, volume_threshold REAL DEFAULT 2.5, z_score_threshold REAL DEFAULT 2.0)''')
         c.execute('''CREATE TABLE IF NOT EXISTS market_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, ticker TEXT, company_name TEXT, event_type TEXT, details TEXT, timestamp TEXT)''')
+        
     conn.commit()
     conn.close()
 
@@ -64,19 +81,35 @@ def register_user(name: str, email: str, password: str) -> dict:
         return {"success": False, "message": "Email is already registered."}
 
     user_id = f"user_{str(uuid.uuid4())[:8]}"
-    c.execute(_q('INSERT INTO users (email, name, password_hash, user_id) VALUES (?, ?, ?, ?)'), (email, name, hash_password(password), user_id))
+    now_utc = datetime.now(timezone.utc).isoformat()
+    
+    c.execute(_q('INSERT INTO users (email, name, password_hash, user_id, last_checked_at) VALUES (?, ?, ?, ?, ?)'), 
+              (email, name, hash_password(password), user_id, now_utc))
     c.execute(_q('INSERT OR IGNORE INTO user_preferences (user_id, price_threshold, volume_threshold, z_score_threshold) VALUES (?, 3.0, 2.5, 2.0)'), (user_id,))
     conn.commit()
     conn.close()
-    return {"success": True, "user": {"id": user_id, "name": name, "email": email}}
+    
+    # CRITICAL FIX: Return the live time (now_utc) instead of None, so new accounts say "Just now" instead of "First visit"
+    return {"success": True, "user": {"id": user_id, "name": name, "email": email, "last_checked_at": now_utc}}
 
 def login_user(email: str, password: str) -> dict:
     conn = get_conn()
     c = conn.cursor()
-    c.execute(_q('SELECT user_id, name, email FROM users WHERE email = ? AND password_hash = ?'), (email, hash_password(password)))
+    c.execute(_q('SELECT user_id, name, email, last_checked_at FROM users WHERE email = ? AND password_hash = ?'), (email, hash_password(password)))
     row = c.fetchone()
+    
+    if row: 
+        user_id, name, user_email, previous_check = row
+        now_utc = datetime.now(timezone.utc).isoformat()
+        
+        c.execute(_q('UPDATE users SET last_checked_at = ? WHERE email = ?'), (now_utc, email))
+        conn.commit()
+        conn.close()
+        
+        # Fallback: if previous_check is somehow empty, use now_utc
+        return {"success": True, "user": {"id": user_id, "name": name, "email": user_email, "last_checked_at": previous_check or now_utc}}
+        
     conn.close()
-    if row: return {"success": True, "user": {"id": row[0], "name": row[1], "email": row[2]}}
     return {"success": False, "message": "Invalid credentials."}
 
 def get_user_preferences(user_id: str) -> dict:

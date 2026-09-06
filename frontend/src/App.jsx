@@ -5,25 +5,54 @@ import ChangesFeed from './components/ChangesFeed';
 import MarketHistory from './components/MarketHistory';
 import AttentionPreferences from './components/AttentionPreferences';
 import Login from './components/Login';
+import LandingPage from './pages/LandingPage';
 import './index.css';
 
 export default function App() {
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('pulse_user')));
+  // SELF-HEALING CACHE: Automatically fixes old profiles missing the timestamp
+  const [user, setUser] = useState(() => {
+    const storedUser = JSON.parse(localStorage.getItem('pulse_user'));
+    if (storedUser && (!storedUser.last_checked_at || storedUser.last_checked_at === 'None')) {
+      storedUser.last_checked_at = new Date().toISOString();
+      localStorage.setItem('pulse_user', JSON.stringify(storedUser));
+    }
+    return storedUser;
+  });
+  
   const [activeTab, setActiveTab] = useState('home');
+  const [authView, setAuthView] = useState(null); 
 
-  const handleLogin = (u) => { setUser(u); localStorage.setItem('pulse_user', JSON.stringify(u)); };
-  const handleLogout = () => { setUser(null); localStorage.removeItem('pulse_user'); };
+  const handleLogin = (u) => { 
+    setUser(u); 
+    localStorage.setItem('pulse_user', JSON.stringify(u)); 
+  };
+  
+  const handleLogout = () => { 
+    setUser(null); 
+    localStorage.removeItem('pulse_user'); 
+    setAuthView(null); 
+  };
 
-  if (!user) return <Login onLogin={handleLogin} />;
+  if (!user) {
+    if (authView) {
+      return <Login onLogin={handleLogin} defaultView={authView} onBack={() => setAuthView(null)} />;
+    }
+    return (
+      <LandingPage 
+        onLoginClick={() => setAuthView('login')} 
+        onSignupClick={() => setAuthView('signup')} 
+      />
+    );
+  }
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home': return <Home userId={user.id} userName={user.name} />;
+      case 'home': return <Home userId={user.id} userName={user.name} lastCheckedAt={user.last_checked_at} />;
       case 'watchlist': return <ManageWatchlist userId={user.id} />;
       case 'changes': return <ChangesFeed userId={user.id} />;
       case 'history': return <MarketHistory userId={user.id} />;
       case 'settings': return <AttentionPreferences userId={user.id} />;
-      default: return <Home userId={user.id} userName={user.name} />;
+      default: return <Home userId={user.id} userName={user.name} lastCheckedAt={user.last_checked_at} />;
     }
   };
 
