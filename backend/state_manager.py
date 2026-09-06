@@ -31,21 +31,24 @@ def init_db():
     conn = get_conn()
     c = conn.cursor()
     
-    # 1. Create table (with last_checked_at if it's a fresh database)
-    if USE_POSTGRES:
-        c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT, last_checked_at TEXT)''')
-    else:
-        c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT, last_checked_at TEXT)''')
+    # 1. Create users table
+    c.execute('''CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, password_hash TEXT, user_id TEXT, last_checked_at TEXT)''')
+    conn.commit() # Save this step safely BEFORE the risky migration
     
-    # 2. Safe Migration: Add column for older accounts (fails silently if it already exists)
+    # 2. Safe Migration: Try to add column, but explicitly rollback if Postgres blocks it
     try:
+        c = conn.cursor()
         c.execute('ALTER TABLE users ADD COLUMN last_checked_at TEXT')
-    except:
-        pass 
+        conn.commit()
+    except Exception:
+        conn.rollback() # CRITICAL FIX: Tells Postgres "My bad, reset the transaction so I can continue!"
         
+    # 3. Resume creating the rest of the tables with a fresh cursor
+    c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS memory_anchors (user_id TEXT PRIMARY KEY, timestamp TEXT, state_data TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_watchlists (user_id TEXT, ticker TEXT, UNIQUE(user_id, ticker))''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (user_id TEXT PRIMARY KEY, price_threshold REAL DEFAULT 3.0, volume_threshold REAL DEFAULT 2.5, z_score_threshold REAL DEFAULT 2.0)''')
+    
     if USE_POSTGRES:
         c.execute('''CREATE TABLE IF NOT EXISTS market_history (id SERIAL PRIMARY KEY, user_id TEXT, ticker TEXT, company_name TEXT, event_type TEXT, details TEXT, timestamp TEXT)''')
     else:
@@ -53,8 +56,6 @@ def init_db():
         
     conn.commit()
     conn.close()
-
-init_db()
 
 def _q(query):
     """Translates SQLite queries to PostgreSQL if running in the cloud."""
